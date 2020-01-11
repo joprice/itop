@@ -11,7 +11,9 @@ use termion::screen::AlternateScreen;
 use tui::backend::{Backend, TermionBackend};
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::widgets::{Block, Borders, Paragraph, Row, Sparkline, Table, Text, Widget};
+use tui::widgets::{
+    Block, Borders, Paragraph, RenderDirection, Row, Sparkline, Table, Text, Widget,
+};
 use tui::{Frame, Terminal};
 
 struct ProcessMeta<'a> {
@@ -80,6 +82,7 @@ fn draw_memory(mut f: &mut Frame<impl Backend>, app: &App, parent: Rect) {
         .borders(Borders::ALL);
 
     Sparkline::default()
+        .direction(RenderDirection::RTL)
         .data(&app.memory)
         .max(100)
         .block(memory)
@@ -93,6 +96,7 @@ fn draw_cpu(mut f: &mut Frame<impl Backend>, app: &App, parent: Rect) {
         .borders(Borders::ALL);
 
     Sparkline::default()
+        .direction(RenderDirection::RTL)
         .data(&app.cpu)
         .style(Style::default().fg(Color::Red))
         .max(100)
@@ -214,7 +218,7 @@ fn main() -> Result<(), failure::Error> {
     let backend = TermionBackend::new(stdout);
     let events = Events::with_config(event::Config {
         exit_key: Key::Char('q'),
-        tick_rate: Duration::from_millis(500),
+        tick_rate: Duration::from_millis(300),
     });
     let mut terminal = Terminal::new(backend)?;
     let mut app = App {

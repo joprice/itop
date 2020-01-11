@@ -7,7 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tui = "0.8.0"
+#tui = "0.8.0"
+#tui = { path = "../../fdehau/tui-rs" }
+tui = { git = "https://github.com/joprice/tui-rs", rev = "f800abb91d8beaf9d128eb7de556942c50783395" }
 failure = "0.1.6"
 termion = "1.5.4"
 slice-deque = "0.3.0"
