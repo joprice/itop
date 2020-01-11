@@ -16,4 +16,4 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Check formatting
-      run: cargo fm --all -- --check
+      run: cargo fmt --all -- --check
