@@ -257,8 +257,10 @@ fn main() -> Result<(), failure::Error> {
             draw_processes(&mut f, &app, bottom[1]);
         })?;
         match events.next()? {
-            Event::Input(_) => {
-                break;
+            Event::Input(input) => {
+                if input == Key::Ctrl('c') || input == Key::Char('q') {
+                    break;
+                }
             }
             Event::Tick => {
                 // refreshing processes is expensive, so do it less frequently
