@@ -16,3 +16,10 @@ sysinfo = "0.10.4"
 chrono = "0.4.10"
 sys-info = "0.5.8"
 itertools = "0.8.2"
+#std = {default-features=false, features=["panic_immediate_abort"]}
+
+[profile.release]
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = 'abort'
