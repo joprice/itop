@@ -16,8 +16,8 @@ use tui::widgets::{
 };
 use tui::{Frame, Terminal};
 
-struct ProcessMeta<'a> {
-    name: &'a str,
+struct ProcessMeta {
+    name: String,
     cpu_usage: f32,
     memory: u64,
     count: usize,
@@ -44,7 +44,7 @@ fn get_processes(system: &sysinfo::System, sort: Sort) -> Vec<ProcessMeta> {
                 memory += process.memory();
             }
             ProcessMeta {
-                name,
+                name: name.to_owned(),
                 cpu_usage,
                 memory,
                 count: group.len(),
@@ -68,14 +68,31 @@ fn draw_processes(mut f: &mut Frame<impl Backend>, app: &App, parent: Rect) {
         .title(" Process List ")
         .border_style(Style::default().fg(Color::Cyan))
         .borders(Borders::ALL);
-    let processes = app.processes.iter().enumerate().map(|(i, item)| {
-        let style = if i == app.position {
-            Style::default().modifier(Modifier::BOLD)
-        } else {
-            Style::default()
-        };
-        Row::StyledData(item.iter(), style)
-    });
+    let processes = app.processes.iter().enumerate().map(
+        |(
+            _i,
+            ProcessMeta {
+                name,
+                cpu_usage,
+                memory,
+                count,
+            },
+        )| {
+            let style = match &app.selected {
+                Some(selected) if name == selected => {
+                    Style::default().modifier(Modifier::BOLD).fg(Color::Green)
+                }
+                _ => Style::default(),
+            };
+            let data = vec![
+                format!("{}", name),
+                format!("{:.2}", cpu_usage),
+                format!("{}", count),
+                format!("{:.2}", (*memory as f64 / app.total_memory as f64) * 100f64),
+            ];
+            Row::StyledData(data.into_iter(), style)
+        },
+    );
     Table::new(HEADERS.iter(), processes)
         .header_style(Style::default().modifier(Modifier::BOLD))
         .widths(&[
@@ -157,11 +174,12 @@ fn draw_header(mut f: &mut Frame<impl Backend>, app: &App, parent: Rect) {
 struct App {
     memory: slice_deque::SliceDeque<u64>,
     cpu: slice_deque::SliceDeque<u64>,
-    processes: Vec<Vec<String>>,
+    processes: Vec<ProcessMeta>,
     system: sysinfo::System,
     title: String,
     hostname: Option<String>,
-    position: usize,
+    selected: Option<String>,
+    total_memory: u64,
     sort: Sort,
     wants_sort: Sort,
 }
@@ -202,28 +220,8 @@ impl App {
     fn update_processes(&mut self) {
         self.system.refresh_processes();
         let processes = get_processes(&self.system, self.sort);
-        let total_memory = self.system.get_total_memory();
-        std::mem::replace(
-            &mut self.processes,
-            processes
-                .into_iter()
-                .map(
-                    |ProcessMeta {
-                         name,
-                         cpu_usage,
-                         memory,
-                         count,
-                     }| {
-                        vec![
-                            format!(" {}", name),
-                            format!("{:.2}", cpu_usage),
-                            format!("{}", count),
-                            format!("{:.2}", (memory as f64 / total_memory as f64) * 100f64),
-                        ]
-                    },
-                )
-                .collect::<Vec<_>>(),
-        );
+        self.total_memory = self.system.get_total_memory();
+        std::mem::replace(&mut self.processes, processes);
     }
 }
 
@@ -244,7 +242,8 @@ fn main() -> Result<(), failure::Error> {
         system: sysinfo::System::new(),
         hostname: sys_info::hostname().ok(),
         title: "itop".to_owned(),
-        position: 0,
+        selected: None,
+        total_memory: 0u64,
         sort: Sort::Cpu,
         wants_sort: Sort::Cpu,
     };
@@ -278,8 +277,17 @@ fn main() -> Result<(), failure::Error> {
         match events.next()? {
             Event::Input(k) if k == Key::Up || k == Key::Char('k') => {
                 // comparing with 0 instead of decrementing first to avoid overflow
-                if app.position != 0 {
-                    app.position = app.position - 1
+                if let Some(selected) = &app.selected {
+                    if let Some(process) = app
+                        .processes
+                        .iter()
+                        .rev()
+                        .skip_while(|&p| p.name != *selected)
+                        .skip(1)
+                        .next()
+                    {
+                        app.selected = Some(process.name.clone());
+                    }
                 }
             }
             Event::Input(k) if k == Key::Char('m') => {
@@ -289,7 +297,19 @@ fn main() -> Result<(), failure::Error> {
                 app.wants_sort = Sort::Cpu;
             }
             Event::Input(k) if k == Key::Down || k == Key::Char('j') => {
-                app.position = (app.position + 1).min(app.processes.len());
+                if let Some(selected) = &app.selected {
+                    if let Some(process) = app
+                        .processes
+                        .iter()
+                        .skip_while(|&p| p.name != *selected)
+                        .skip(1)
+                        .next()
+                    {
+                        app.selected = Some(process.name.clone());
+                    }
+                } else {
+                    app.selected = app.processes.iter().next().map(|p| p.name.to_owned());
+                }
             }
             Event::Input(input) => {
                 if input == Key::Ctrl('c') || input == Key::Char('q') {
