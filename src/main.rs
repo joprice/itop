@@ -23,7 +23,13 @@ struct ProcessMeta<'a> {
     count: usize,
 }
 
-fn get_processes(system: &sysinfo::System) -> Vec<ProcessMeta> {
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum Sort {
+    Cpu,
+    Memory,
+}
+
+fn get_processes(system: &sysinfo::System, sort: Sort) -> Vec<ProcessMeta> {
     let mut processes = system
         .get_process_list()
         .values()
@@ -45,7 +51,10 @@ fn get_processes(system: &sysinfo::System) -> Vec<ProcessMeta> {
             }
         })
         .collect::<Vec<_>>();
-    processes.sort_by_key(|p| std::cmp::Reverse((p.cpu_usage * 100f32) as u32));
+    match sort {
+        Sort::Memory => processes.sort_by_key(|p| std::cmp::Reverse((p.memory) as u32)),
+        Sort::Cpu => processes.sort_by_key(|p| std::cmp::Reverse((p.cpu_usage * 100f32) as u32)),
+    };
     processes
         .into_iter()
         //take enough for a reasonably large screen size
@@ -59,10 +68,14 @@ fn draw_processes(mut f: &mut Frame<impl Backend>, app: &App, parent: Rect) {
         .title(" Process List ")
         .border_style(Style::default().fg(Color::Cyan))
         .borders(Borders::ALL);
-    let processes = app
-        .processes
-        .iter()
-        .map(|item: &Vec<String>| Row::Data(item.iter()));
+    let processes = app.processes.iter().enumerate().map(|(i, item)| {
+        let style = if i == app.position {
+            Style::default().modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        Row::StyledData(item.iter(), style)
+    });
     Table::new(HEADERS.iter(), processes)
         .header_style(Style::default().modifier(Modifier::BOLD))
         .widths(&[
@@ -148,6 +161,9 @@ struct App {
     system: sysinfo::System,
     title: String,
     hostname: Option<String>,
+    position: usize,
+    sort: Sort,
+    wants_sort: Sort,
 }
 
 const BUFFER_CAPACITY: usize = 1000;
@@ -185,7 +201,7 @@ impl App {
 
     fn update_processes(&mut self) {
         self.system.refresh_processes();
-        let processes = get_processes(&self.system);
+        let processes = get_processes(&self.system, self.sort);
         let total_memory = self.system.get_total_memory();
         std::mem::replace(
             &mut self.processes,
@@ -228,6 +244,9 @@ fn main() -> Result<(), failure::Error> {
         system: sysinfo::System::new(),
         hostname: sys_info::hostname().ok(),
         title: "itop".to_owned(),
+        position: 0,
+        sort: Sort::Cpu,
+        wants_sort: Sort::Cpu,
     };
 
     let mut i = 0;
@@ -257,6 +276,21 @@ fn main() -> Result<(), failure::Error> {
             draw_processes(&mut f, &app, bottom[1]);
         })?;
         match events.next()? {
+            Event::Input(k) if k == Key::Up || k == Key::Char('k') => {
+                // comparing with 0 instead of decrementing first to avoid overflow
+                if app.position != 0 {
+                    app.position = app.position - 1
+                }
+            }
+            Event::Input(k) if k == Key::Char('m') => {
+                app.wants_sort = Sort::Memory;
+            }
+            Event::Input(k) if k == Key::Char('c') => {
+                app.wants_sort = Sort::Cpu;
+            }
+            Event::Input(k) if k == Key::Down || k == Key::Char('j') => {
+                app.position = (app.position + 1).min(app.processes.len());
+            }
             Event::Input(input) => {
                 if input == Key::Ctrl('c') || input == Key::Char('q') {
                     break;
@@ -264,7 +298,11 @@ fn main() -> Result<(), failure::Error> {
             }
             Event::Tick => {
                 // refreshing processes is expensive, so do it less frequently
-                let update_processes = i % 8 == 0;
+                let sort_updated = app.sort != app.wants_sort;
+                let update_processes = i % 8 == 0 || sort_updated;
+                if sort_updated {
+                    app.sort = app.wants_sort;
+                }
                 app.update(update_processes);
                 i += 1;
             }
