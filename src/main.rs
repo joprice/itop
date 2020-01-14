@@ -68,21 +68,23 @@ fn draw_processes(mut f: &mut Frame<impl Backend>, app: &App, parent: Rect) {
         .title(" Process List ")
         .border_style(Style::default().fg(Color::Cyan))
         .borders(Borders::ALL);
-    let processes = app.processes.iter().enumerate().map(
-        |(
-            _i,
-            ProcessMeta {
-                name,
-                cpu_usage,
-                memory,
-                count,
-            },
-        )| {
+    let processes = app.processes.iter().map(
+        |ProcessMeta {
+             name,
+             cpu_usage,
+             memory,
+             count,
+         }| {
             let style = match &app.selected {
                 Some(selected) if name == selected => {
                     Style::default().modifier(Modifier::BOLD).fg(Color::Green)
                 }
-                _ => Style::default(),
+                _ => match &app.highlighted {
+                    Some(highlighted) if name == highlighted => {
+                        Style::default().modifier(Modifier::BOLD)
+                    }
+                    _ => Style::default(),
+                },
             };
             let data = vec![
                 format!("{}", name),
@@ -178,6 +180,7 @@ struct App {
     system: sysinfo::System,
     title: String,
     hostname: Option<String>,
+    highlighted: Option<String>,
     selected: Option<String>,
     total_memory: u64,
     sort: Sort,
@@ -242,6 +245,7 @@ fn main() -> Result<(), failure::Error> {
         system: sysinfo::System::new(),
         hostname: sys_info::hostname().ok(),
         title: "itop".to_owned(),
+        highlighted: None,
         selected: None,
         total_memory: 0u64,
         sort: Sort::Cpu,
@@ -277,39 +281,51 @@ fn main() -> Result<(), failure::Error> {
         match events.next()? {
             Event::Input(k) if k == Key::Up || k == Key::Char('k') => {
                 // comparing with 0 instead of decrementing first to avoid overflow
-                if let Some(selected) = &app.selected {
+                if let Some(highlighted) = &app.highlighted {
                     if let Some(process) = app
                         .processes
                         .iter()
                         .rev()
-                        .skip_while(|&p| p.name != *selected)
+                        .skip_while(|&p| p.name != *highlighted)
                         .skip(1)
                         .next()
                     {
-                        app.selected = Some(process.name.clone());
+                        app.highlighted = Some(process.name.clone());
                     } else {
                         // reset if the process no longer exists
-                        app.selected = None;
+                        app.highlighted = None;
                     }
                 }
             }
             Event::Input(k) if k == Key::Down || k == Key::Char('j') => {
-                if let Some(selected) = &app.selected {
+                if let Some(highlighted) = &app.highlighted {
                     if let Some(process) = app
                         .processes
                         .iter()
-                        .skip_while(|&p| p.name != *selected)
+                        .skip_while(|&p| p.name != *highlighted)
                         .skip(1)
                         .next()
                     {
-                        app.selected = Some(process.name.clone());
+                        app.highlighted = Some(process.name.clone());
                     } else {
                         // reset if the process no longer exists
-                        app.selected = None;
+                        app.highlighted = None;
                     }
                 } else {
-                    app.selected = app.processes.iter().next().map(|p| p.name.to_owned());
+                    app.highlighted = app.processes.iter().next().map(|p| p.name.to_owned());
                 }
+            }
+            Event::Input(Key::Char('\n')) => {
+                match (&app.highlighted, &app.selected) {
+                    (Some(highlighted), Some(selected)) if highlighted == selected => {
+                        app.selected = None
+                    }
+                    (Some(highlighted), Some(selected)) if highlighted != selected => {
+                        app.selected = Some(highlighted.to_owned())
+                    }
+                    (Some(highlighted), None) => app.selected = Some(highlighted.to_owned()),
+                    _ => (),
+                };
             }
             Event::Input(k) if k == Key::Char('m') => {
                 app.wants_sort = Sort::Memory;

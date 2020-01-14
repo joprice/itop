@@ -7,3 +7,6 @@
 ## TODO
 
 - only recalculate highlighted item on process list change
+  - this avoids a selected reference hanging around
+  - move selection to nearest neighbor when item dies?
+  - set selected on process meta item
