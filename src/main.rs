@@ -287,14 +287,11 @@ fn main() -> Result<(), failure::Error> {
                         .next()
                     {
                         app.selected = Some(process.name.clone());
+                    } else {
+                        // reset if the process no longer exists
+                        app.selected = None;
                     }
                 }
-            }
-            Event::Input(k) if k == Key::Char('m') => {
-                app.wants_sort = Sort::Memory;
-            }
-            Event::Input(k) if k == Key::Char('c') => {
-                app.wants_sort = Sort::Cpu;
             }
             Event::Input(k) if k == Key::Down || k == Key::Char('j') => {
                 if let Some(selected) = &app.selected {
@@ -306,10 +303,19 @@ fn main() -> Result<(), failure::Error> {
                         .next()
                     {
                         app.selected = Some(process.name.clone());
+                    } else {
+                        // reset if the process no longer exists
+                        app.selected = None;
                     }
                 } else {
                     app.selected = app.processes.iter().next().map(|p| p.name.to_owned());
                 }
+            }
+            Event::Input(k) if k == Key::Char('m') => {
+                app.wants_sort = Sort::Memory;
+            }
+            Event::Input(k) if k == Key::Char('c') => {
+                app.wants_sort = Sort::Cpu;
             }
             Event::Input(input) => {
                 if input == Key::Ctrl('c') || input == Key::Char('q') {
