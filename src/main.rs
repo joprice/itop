@@ -16,9 +16,10 @@ use tui::widgets::{
 };
 use tui::{Frame, Terminal};
 
+// TODO: collect process-level history
 struct ProcessMeta {
     name: String,
-    cpu_usage: f32,
+    cpu_usage: Vec<f32>,
     memory: u64,
     count: usize,
 }
@@ -127,9 +128,22 @@ fn draw_cpu(mut f: &mut Frame<impl Backend>, app: &App, parent: Rect) {
         .border_style(Style::default().fg(Color::Cyan))
         .borders(Borders::ALL);
 
+    let cpu_data = (if let Some(ref selected) = app.selected {
+        app.processes.iter().find_map(|p| {
+            if &p.name == selected {
+                Some(vec![p.cpu_usage as u64].into_iter().collect::<Vec<_>>())
+            } else {
+                None
+            }
+        })
+    } else {
+        None
+    })
+    .unwrap_or(app.cpu.iter().cloned().collect::<Vec<_>>());
+
     Sparkline::default()
         .direction(RenderDirection::RTL)
-        .data(&app.cpu)
+        .data(cpu_data.as_slice())
         .style(Style::default().fg(Color::Red))
         .max(100)
         .block(cpu)
